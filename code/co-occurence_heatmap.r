@@ -16,6 +16,22 @@ rownames(V)
 ideas_cooccur <- slice(V, 1:29) # here separate challenges from solutions
 #str(ideas_cooccur)
 
+ic <- ideas_cooccur[apply(ideas_cooccur, 2, function(x) any(x > 10)), ]
+col1 <- colnames(ic)[1]
+ic <- ic[!is.na(ic[,col1]),]
+colsdf <- data.frame()
+for(i in 1:nrow(ic)){
+  for(j in 1:ncol(ic)){
+    if(ic[i, j] < 10){
+      next
+    } else {
+      cols <- data.frame("cols" = colnames(ic[j]))
+    }
+    colsdf <- rbind(colsdf, cols)
+  }
+}
+
+ic2 <- select(ic, colsdf$cols)
 ideas_cooccur
 upper.tri(ideas_cooccur)
 ?upper.diag
