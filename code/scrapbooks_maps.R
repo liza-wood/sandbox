@@ -2,7 +2,8 @@ library(dplyr)
 library(ggmap)
 # European maps ----
 ## All of Europe ----
-register_google(key = "AIzaSyBY21rxxoVaPbu3lUAwRPotDtgCK4p9tQE")
+source("keys.R")
+register_google(key = google_key)
 map_eu <- map_data(map = "world") %>% 
   filter(region %in% c("UK", "Portugal", "Spain", "France",
                        "Belgium",  "Netherlands", "Luxembourg", "Germany",
