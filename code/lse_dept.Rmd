@@ -87,7 +87,7 @@ fellows <- ac_staff[ac_staff$role_sp == "Fellow",]
 write.csv(faculty, 'data/lse_people_raw.csv', row.names = F)
 ```
 
-The department has `r nrow(lse_people)`, `r nrow(ac_staff)` of which are Academic Staff, `r nrow(phds)` of which are PhD students, and the remainder are visiting or affiliate researchers and teachers.  
+The department has `r nrow(lse_people)` people, `r nrow(ac_staff)` of which are Academic Staff, `r nrow(phds)` of which are PhD students, and the remainder are visiting or affiliate researchers and teachers.  
 
 ## Academic Staff
 
@@ -439,13 +439,10 @@ ggsave('figures/mdb_water_usage_blank.png', width = 4.77, height = 3.5)
 
 ```{r}
 df <- readRDS("~/OneDrive - University of Exeter/data/organicseed_adoption/df.rds")
-df$OG_value
-df$TotalAcreage
-df$OGseed_percent_maincrop
+#df$OG_value
+#df$TotalAcreage
+#df$OGseed_percent_maincrop
 
-ggplot(df, aes(x = OGseed_percent_maincrop, y = OG_value)) +
-  geom_point() +
-  geom_smooth()
 
 df %>% 
   mutate(OGSeedOGIntegrityf = case_when(
