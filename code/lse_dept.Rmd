@@ -1,0 +1,475 @@
+---
+title: "LSE Department of Geography and Environment"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(RSelenium)
+library(rvest)
+library(xml2)
+library(stringr)
+library(ggplot2)
+library(dplyr)
+library(kableExtra)
+knitr::opts_chunk$set(echo = FALSE, message = F, warning = F)
+```
+
+```{r, cache = T}
+url <- "https://www.lse.ac.uk/geography-and-environment/our-people"
+
+ppl <- read_html(url) %>% 
+  html_nodes(css = '.sys_t0') %>%
+  html_attr("href") %>% 
+  trimws() %>% 
+  unique()
+
+lse_people <- data.frame()
+for(i in 1:length(ppl)){
+  page <- read_html(paste0('https://www.lse.ac.uk', ppl[i]))
+  class <- stringr::str_extract(ppl[i], '(?<=people\\/).*(?=\\/)')
+  name <- page %>% 
+    html_nodes(css = '.people__name') %>% 
+    html_text()
+  role <- page %>% 
+    html_nodes(css = '.people__position') %>% 
+    html_text()
+  dept <- page %>% 
+    html_nodes(css = '.people__dept') %>% 
+    html_text()
+  bio <- page %>% 
+    html_nodes(css = '.people__bio p') %>% 
+    html_text()
+  df <- data.frame(class, dept, name, role, #orcid, 
+                   paste(bio, collapse = "\n"))
+  lse_people <- rbind(lse_people, df)
+}
+
+lse_people$area <- str_extract(lse_people$role, "(?<=(in |of )).*")
+lse_people$leadership <- str_extract(lse_people$area, "(?<=;).*|(?<=Acting ).*")
+lse_people$area <- trimws(str_remove(lse_people$area, ";.*|and Acting.*"))
+lse_people$area[lse_people$area == "Urban Planning Studies"] <- "Urban Planning"
+lse_people$name[lse_people$name == "Professor Shin, Hyun Bang"] <- "Professor Hyun Bang Shin"
+lse_people$education <- str_detect(lse_people$role, "\\(Education\\)")
+
+phds <- lse_people[lse_people$class == "phd-students" &
+                        lse_people$dept == "Department of Geography and Environment",]
+
+ac_staff <- lse_people[lse_people$class == "academic-staff" &
+                        lse_people$dept == "Department of Geography and Environment",]
+
+ac_staff$role_sp <- str_extract(ac_staff$role, "Fellow|Emeritus Professor|Assistant Professor|Associate Professor|Professor")
+ac_staff$role_sp <- factor(ac_staff$role_sp, c("Fellow", "Assistant Professor",
+                                               "Associate Professor", "Professor",
+                                               "Emeritus Professor"))
+
+envt <- c("Atkinson", "Berland", "Bridel", "Chatterjee", "Corwin", "Dajani",
+          "Dietz", "Dugoua", "Galizzi", "Holman", "Jarvis", "Jones", "Khanna",
+          "Mason", "Matthan", "Mourato", "Neumayer", "Pagel", "Palmer", 
+          "Paprocki", "Perkins", "Pulido", "Robinson", "Roth", "Shreedhar", 
+          "Thomas Smith", "Wolff")
+econ_geog <- c("Aravena González", "Bagagli", "Boeri", "Carozzi", "Cheshire", 
+            "Crescenzi", "Gibbons", "Henderson", "Hilber", "Hulke", "Neil Lee",
+            "Monastiriotis", "Overman", "Pani", "Pietrabissa", "Renzullo",
+            "Rigo", "Rodríguez-Pose", "Olmo Silva", "Storper", "Varela Varela",
+            "Whitehead")
+urban <- c("Antona", "Bloom", "Centner", "Corwin", "Ghoddousi", "Gordon",
+           "Holman", "Jones", "Mace", "Mercer", "Pani", "Pulido", "Sanyal",
+           "Scanlon", "Bang Shin", "Speer", "Zeiderman")
+
+ac_staff$envt <- str_detect(ac_staff$name, paste(envt, collapse = "|"))
+ac_staff$econ_geog <- str_detect(ac_staff$name, paste(econ_geog, collapse = "|"))
+ac_staff$urban <- str_detect(ac_staff$name, paste(urban, collapse = "|"))
+
+envt_grp <- ac_staff[ac_staff$envt == T,]
+faculty <- ac_staff[ac_staff$role_sp != "Fellow",]
+fellows <- ac_staff[ac_staff$role_sp == "Fellow",]
+
+write.csv(faculty, 'data/lse_people_raw.csv', row.names = F)
+```
+
+The department has `r nrow(lse_people)`, `r nrow(ac_staff)` of which are Academic Staff, `r nrow(phds)` of which are PhD students, and the remainder are visiting or affiliate researchers and teachers.  
+
+## Academic Staff
+
+* Rank: 14 Fellows, 11 Assistant Professors, 10 Associate Professors, 21 Professors, 3 Emeritus Professors  
+* Topic: Economic Geography: `r nrow(ac_staff[ac_staff$econ_geog == T,])`; Environment: `r nrow(ac_staff[ac_staff$envt == T,])`; Urbanisation, Planning, and Development `r nrow(ac_staff[ac_staff$urban == T,])` 
+
+**Faculty** 
+
+```{r, warning = F, message = F}
+faculty_details <- read.csv('data/lse_people_manual.csv')
+
+faculty <- dplyr::left_join(faculty, faculty_details)
+faculty_current <- faculty[faculty$role_sp != "Emeritus Professor",]
+```
+
+There are `r nrow(faculty_current)` current faculty, excluding Fellows and Emeritus Professors. Of these faculty, these are the breakdowns of their hiring area:
+
+```{r}
+area_tbl <- faculty_current %>% 
+  group_by(area) %>% summarize(n = n(),
+                               name = paste(word(name, -1), collapse = "; ")) %>% 
+  arrange(-n) %>% filter(!is.na(area))
+kable(area_tbl, booktabs = T, col.names = c("Title area", "N", "Names")) %>%
+  kable_styling(latex_options = "striped")
+```
+
+Of these are are only 2 fully education:  
+
+* Dr Laura Antona: Critical Feminist Human Geographer  
+* Dr Erica Pani: Heterodox Economic Geographer focusing in equity  
+
+```{r, eval = F}
+table(faculty_current$gender)
+prop.table(table(faculty_current$gender))
+
+table(faculty_current$gender, faculty_current$econ_geog)
+table(faculty_current$gender, faculty_current$envt)
+table(faculty_current$gender, faculty_current$urban)
+```
+
+The gender breakdown is 17 F and 25 M, which is approximately 40/60. This differs among areas of expertise:  
+
+* Economic Geography: 4 F /9 M  
+* Environment: 8 F /9 M   
+* Urbanisation, Planning, and Development: 8 F / 4 M  
+
+The faculty are fairly homogenous in that they come from a handful of countries, in the table below: 
+```{r}
+country_tbl <- faculty_current %>% 
+  group_by(phd_institution_country) %>% summarize(n = n()) %>% 
+  arrange(-n) %>% filter(!is.na(phd_institution_country))
+kable(country_tbl, booktabs = T, col.names = c("Country of PhD Institution", "N")) %>%
+  kable_styling(latex_options = "striped")
+```
+
+Likewise, there is a trend towards a set of high-ranking universities:
+
+```{r}
+inst_tbl <- faculty_current %>% 
+  group_by(phd_institution) %>% summarize(n = n()) %>% 
+  arrange(-n) %>% filter(!is.na(phd_institution))
+kable(inst_tbl, booktabs = T, col.names = c("Country of PhD Institution", "N")) %>%
+  kable_styling(latex_options = "striped")
+```
+
+And their topics are generally leaning towards economics or classic geography. Across different types, 18 faculty have economics degrees (`r paste(round(100*(16/nrow(faculty_current))), '%')`), which includes economic geography, and have 10 (`r paste(round(100*(10/nrow(faculty_current))), '%')`)some form of geography, excluding the one physical geographer. 
+
+```{r}
+degree_tbl <- faculty_current %>% 
+  group_by(phd_degree) %>% summarize(n = n()) %>% 
+  arrange(-n) %>% filter(!is.na(phd_degree))
+kable(degree_tbl, booktabs = T, col.names = c("Degree", "N")) %>%
+  kable_styling(latex_options = "striped")
+```
+
+```{r, results = F}
+summary(faculty_current$phd_year)
+```
+
+Last, the year that faculty were granted their PhD ranges from 1972 to 2024, with the mean and median year being 2007. A quarter of hires have earned their degree since 2017, with women predominating the more recent hires. 
+```{r}
+ggplot(faculty_current, aes(x = phd_year, fill = gender)) +
+  geom_bar() + theme_minimal() + scale_fill_viridis_d(begin = .3, end = .7) +
+  labs(fill = "Gender", x = "Year PhD Awarded", y = "Count", title = "Active departmental faculty based on year PhD was awarded")
+
+
+```
+
+**Fellows** 
+
+```{r}
+fellow_area <- fellows %>% 
+  group_by(area) %>% summarize(n = n(),
+                               name = paste(word(name, -1), collapse = "; ")) %>% 
+  arrange(-n) %>% filter(!is.na(area))
+kable(fellow_area, booktabs = T, col.names = c("Title area", "N", "Names")) %>%
+  kable_styling(latex_options = "striped")
+```
+
+## PhD Students 
+
+```{r}
+phd_area <- phds %>% 
+  group_by(area) %>% summarize(n = n()) %>% 
+  arrange(-n) %>% filter(!is.na(area))
+kable(phd_area, booktabs = T, col.names = c("Title area", "N")) %>%
+  kable_styling(latex_options = "striped")
+```
+
+## All students LSE 
+
+```{r}
+students <- read.csv('data/lse_enrollment.csv')
+st <- tidyr::pivot_longer(students, cols = 2:ncol(students),
+                    names_to = "country", values_to = "n") %>% 
+  mutate(level = str_extract(country, 'ug|pg'))
+totals <- st[st$country %in% c("total_ug_students", "total_pg_students",
+                               "ug_overseas", "pg_overseas"), ]
+
+totals %>% 
+  filter(country %in% c("total_ug_students", "total_pg_students")) %>% 
+  ggplot(aes(x = ay, y = n, fill = level)) +
+  geom_col(position = "dodge") +
+  theme_minimal()
+
+totals %>% 
+  mutate(country = case_when(
+    country %in% c("total_ug_students", "total_pg_students") ~ "total_students",
+    country %in% c("ug_overseas", "pg_overseas") ~ "overseas_students",
+    T ~ NA
+  )) %>% 
+  tidyr::pivot_wider(names_from = country, values_from = n) %>% 
+  mutate(domestic_students = total_students - overseas_students,
+         domestic_prop = domestic_students/total_students,
+         overseas_prop = overseas_students/total_students) %>% 
+  tidyr::pivot_longer(cols = c(overseas_prop, domestic_prop),
+                      names_to = "student_type", values_to = "prop") %>% 
+  #filter(level == "ug") %>% 
+  ggplot(aes(x = ay, y = prop, fill = student_type)) +
+  geom_col() +
+  facet_wrap(~level) +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+geog <- st[!st$country %in% c("total_ug_students", "total_pg_students",
+                              "ug_overseas", "pg_overseas"),]
+
+order <- c("UK", "Asia", "Europe", "North America", "South America", # could be switched
+           "Africa", "Australasia")
+
+total_simple <- totals %>% 
+  filter(country %in% c("total_ug_students", "total_pg_students")) %>% 
+  select(-country) %>% 
+  rename(n_total = n)
+
+total_uk <- totals %>% 
+  mutate(country = case_when(
+    country %in% c("total_ug_students", "total_pg_students") ~ "total_students",
+    country %in% c("ug_overseas", "pg_overseas") ~ "overseas_students",
+    T ~ NA
+  )) %>% 
+  tidyr::pivot_wider(names_from = country, values_from = n) %>% 
+  mutate(n = total_students - overseas_students) %>% 
+  mutate(country = "UK") %>% 
+  select(colnames(geog))
+
+geog_df1 <- geog %>% 
+  mutate(country = str_remove(country, "pg_|ug_"),
+         country = case_when(
+           country == "namerica" ~ "North America",
+           country == "samerica" ~ "South America",
+           T ~ tools::toTitleCase(country)
+         )) %>% 
+  rbind(total_uk) %>% 
+  left_join(total_simple) %>% 
+  mutate(prop = 100*(n/n_total),
+         level = ifelse(level == "ug", "Undergraduate", "Postgraduate")) 
+  #filter(level == "ug") %>% 
+geog_df1 %>% 
+  ggplot(aes(x = ay, y = prop, fill = factor(country, order))) +
+  geom_col(position = "dodge") +
+  facet_wrap(~factor(level, c("Undergraduate", "Postgraduate"))) +
+  theme_minimal() +
+  #wesanderson::wes_palette("AsteroidCity2", n = 7) +
+  scale_fill_manual(values = c("#D8B70A","#02401B","#972D15","#A2A475","#81A88D",
+                                "#C27D38", "#899DA4"))+
+  theme(text = element_text(family = "Times", size = 16),
+        legend.position = "bottom", ,
+          plot.caption = element_text(color = "gray40", size = 10)) +
+  guides(fill = guide_legend(nrow = 1)) +
+  labs(fill = "", x = "Year", y = "Percent (%)", title = "LSE enrollment by location (2016-2023)", caption = "Source: LSE Statistics on Students (2025)")
+
+ggsave('figures/lse_enrollment.png', width = 8.5, height = 4)
+
+geog_df1 %>% 
+  filter(ay == 2023) %>% 
+  ggplot(aes(x = factor(level, c("Undergraduate", "Postgraduate")), 
+             y = prop, fill = factor(country, order))) +
+  geom_col(position = "dodge") +
+  theme_minimal() +
+  #wesanderson::wes_palette("AsteroidCity2", n = 7) +
+  scale_fill_manual(values = c("#D8B70A","#02401B","#972D15","#A2A475","#81A88D",
+                                "#C27D38", "#899DA4"))+
+  theme(text = element_text(family = "Times", size = 16),
+        legend.position = "bottom", ,
+          plot.caption = element_text(color = "gray40", size = 10)) +
+  guides(fill = guide_legend(nrow = 1)) +
+  labs(fill = "", x = "", y = "Percent (%)", title = "LSE enrollment by location (2023/24)", caption = "Source: LSE Statistics on Students (2025)")
+
+ggsave('figures/lse_enrollment23.png', width = 8, height = 4)
+```
+
+```{r}
+country_tbl$phd_institution_country[country_tbl$phd_institution_country == "USA"] <- "North America"
+country_tbl$phd_institution_country[country_tbl$phd_institution_country %in% c("Italy",
+                                                       "Germany",
+                                                       "Spain", 
+                                                       "Switzerland")] <- "Europe"
+
+ggplot(country_tbl,
+       aes(x = phd_institution_country, y = n, fill = phd_institution_country)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "", y = "Number of faculty", title = "Location of PhD-granting institution", subtitle = "LSE Department of Geography and the Environment",
+       caption = "Source: LSE Department of Geography and Environment > People (2025)") +    
+  scale_fill_manual(values = c("#D8B70A","#A2A475","#972D15"))+
+  theme_minimal() +
+  theme(text = element_text(family = "Times", size = 14),
+        legend.position = "none",
+          plot.caption = element_text(color = "gray40", size = 10))
+ggsave('figures/lse_dept_geo.png', width = 6, height = 4)
+
+```
+
+
+```{r}
+cp <- read.csv('data/climate_policy_database_policies_export.csv')
+ggplot(cp, aes(x = decision_date)) +
+  geom_bar(fill = "#02401B") +
+  xlim(c(1960, 2024)) +
+  theme_minimal() +
+  labs(x = "Year", y = "Count", title = "Climate policies adopted across 198 countries (1960-2024)",
+       caption = "Source: NewClimate Institute (2025)") +
+    theme(text = element_text(family = "Times", size = 14),
+          plot.caption = element_text(color = "gray40", size = 10))
+ggsave('figures/climate_policies.png', width = 6.1, height = 4)
+```
+
+```{r}
+mlo <- read.csv('data/co2_mm_mlo.csv')
+ggplot(mlo, aes(x = decimal.date, y = average)) +
+  geom_point(color = "#02401B", size = .5) +
+  xlim(c(1960, 2024)) +
+  theme_minimal() +
+  labs(x = "Year", y = "CO2 PPM", title = "Atmospheric Carbon Levels Mauna Loa (1960-2024)",
+       caption = "Source: NOAA (2025)") +
+    theme(text = element_text(family = "Times", size = 14),
+          plot.caption = element_text(color = "gray40", size = 10))
+ggsave('figures/co2.png', width = 6.1, height = 4)
+```
+
+
+```{r}
+gd <- haven::read_dta('data/green_inn_data.dta')
+gd$ginvention <- exp(gd$lnginvention_ap)-1
+summary(gd$ginvention)
+max(gd$id)
+sum(gd$ginvention)
+
+gd %>% 
+  group_by(year) %>% 
+  summarize(n = sum(ginvention)) %>% 
+  ggplot(aes(x = factor(year), y = n)) +
+  geom_col(fill = "#899DA4")  +
+  theme_minimal() +
+  labs(x = "Year", y = "Number of patent applications", 
+       title = "Green invention",
+       subtitle = "By polluting companies in China (2008-2017)",
+       caption = "Source: Cheng et al. (2023)") +
+    theme(text = element_text(family = "Times", size = 16),
+          plot.caption = element_text(color = "gray40", size = 10))
+ggsave('figures/green_innovation.png', width = 5, height = 3.5)
+```
+
+```{r}
+mdb <- read.csv('data/mdb_wateruse.csv')
+
+p1 <- mdb %>% 
+  ggplot(aes(x = year, y = allocated_percent)) +
+  geom_col(fill = "#899DA4")  +
+  theme_minimal() +
+  labs(x = "Year", y = "Percent of allocation (%)", 
+       title = "Percent of water rights allocated (1999-2021)",
+       caption = "Source: Murray Irrigation (2025)") +
+    theme(text = element_text(family = "Times", size = 14),
+          plot.caption = element_text(color = "gray40", size = 10))
+p1
+ggsave('figures/mdb_allocation.png', width = 5, height = 3.5)
+p1 + theme(panel.grid.major = element_blank(), 
+           panel.grid.minor = element_blank(),
+           panel.background = element_blank())
+ggsave('figures/mdb_allocation_blank.png', width = 5, height = 3.5)
+
+p2 <- ggplot(mdb, aes(x = year, y = avg_price_per_ml)) +
+  geom_point(color = "gray30")  +
+  geom_line(color = "gray30") +
+  theme_minimal() +
+  labs(x = "Year", y = "Water price (AUS$/ML)", 
+       title = "Water prices (1999-2021)",
+       caption = "Source: Murray Irrigation (2025)") +
+    theme(text = element_text(family = "Times", size = 14),
+          plot.caption = element_text(color = "gray40", size = 10))
+p2
+ggsave('figures/mdb_water_price.png', width = 4.81, height = 3.5)
+p2 + theme(panel.grid.major = element_blank(), 
+           panel.grid.minor = element_blank(),
+           panel.background = element_blank())
+ggsave('figures/mdb_water_price_blank.png', width = 4.81, height = 3.5)
+p3 <- mdb %>% 
+  tidyr::pivot_longer(cols = rice_usage_ml:other_usage_ml,
+               names_to = "crop", values_to = "usage_ml") %>% 
+  mutate(crop = ifelse(crop == "rice_usage_ml", "Rice", "Perennial"),
+         usage_10k = usage_ml/10000) %>% 
+  ggplot(aes(x = year, y = usage_10k, color = crop)) +
+  geom_point()  +
+  geom_line(linetype = 2) +
+  scale_color_manual(values = c("#D8B70A","#972D15")) +
+  theme_minimal() +
+  labs(x = "Year", y = "Water usage (10K ML)", 
+       title = "Water usage by crop type (1999-2021)",
+       caption = "Source: Murray Irrigation (2025)", color = "Crop") +
+    theme(text = element_text(family = "Times", size = 14),
+          plot.caption = element_text(color = "gray40", size = 10),
+          legend.position = "bottom")
+p3
+p3 <- p3 + theme(legend.position = "none")
+p3
+ggsave('figures/mdb_water_usage.png', width = 4.77, height = 3.5)
+p3 + theme(panel.grid.major = element_blank(), 
+           panel.grid.minor = element_blank(),
+           panel.background = element_blank())
+ggsave('figures/mdb_water_usage_blank.png', width = 4.77, height = 3.5)
+```
+
+
+```{r}
+df <- readRDS("~/OneDrive - University of Exeter/data/organicseed_adoption/df.rds")
+df$OG_value
+df$TotalAcreage
+df$OGseed_percent_maincrop
+
+ggplot(df, aes(x = OGseed_percent_maincrop, y = OG_value)) +
+  geom_point() +
+  geom_smooth()
+
+df %>% 
+  mutate(OGSeedOGIntegrityf = case_when(
+    OGSeedOGIntegrityf == "Strongly agree" ~ "Strongly\nagree",
+    OGSeedOGIntegrityf == "Strongly disagree" ~ "Strongly\ndisagree",
+    T ~ OGSeedOGIntegrityf
+  )) %>% 
+  mutate(OGSeedOGIntegrityf = factor(OGSeedOGIntegrityf,
+                                     c("Strongly\ndisagree", "Disagree",
+                                     "Neutral", "Agree",
+                                     "Strongly\nagree"))) %>% 
+  filter(!is.na(OGSeedOGIntegrityf)) %>% 
+  ggplot(aes(y = OGseed_percent_maincrop, 
+               x = factor(OGSeedOGIntegrityn))) +
+  geom_boxplot(color = "#02401B", width = 0.5) +
+  #geom_point(alpha = 0.1) +
+  theme_minimal() +
+  labs(x = "Strength of organic ethos", y = "Compliance rate (%)", 
+       title = "Compliance within organic seed loophole",
+       caption = "Source: Wood et al. (forthcoming)") +
+    theme(text = element_text(family = "Times", size = 14),
+          plot.caption = element_text(color = "gray40", size = 10),
+          legend.position = "bottom")
+ggsave('figures/og_compliance.png', width = 5.2, height = 3.5)
+
+```
+

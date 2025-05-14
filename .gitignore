@@ -3,6 +3,7 @@ code/twitter_key.R
 etsy.R
 code/etsy.R
 keys.R
+code/kgd_bipartite/
 
 # History files
 .Rhistory
